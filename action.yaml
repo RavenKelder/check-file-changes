@@ -1,0 +1,38 @@
+name: 'Check Git File Changes'
+description: 'Checks for file changes between branches'
+inputs:
+  to-match: 
+    description: 'String to match file changes for'
+    required: true
+outputs:
+  matched:
+    description: "Whether the changes contains the string to match"
+    value: ${{ steps.check-file-changes.outputs.matched }}
+runs:
+  using: "composite"
+  steps:
+    - id: check-file-changes
+      name: "Check file changes"
+      run: |
+        if [[ $GITHUB_EVENT_NAME == "pull_request" ]]; then
+          branch=$(cat $GITHUB_EVENT_PATH | jq -r .pull_request.head.ref)
+          base_ref=$(cat $GITHUB_EVENT_PATH | jq -r .pull_request.base.ref)
+          github_sha=$(cat $GITHUB_EVENT_PATH | jq -r .pull_request.head.sha)
+          changed_files=$(git diff --name-only origin/$base_ref...$github_sha)
+        elif [[ $GITHUB_EVENT_NAME == "push" ]]; then
+           branch=main
+           base_ref=$(cat $GITHUB_EVENT_PATH | jq -r .before)
+           changed_files=$(git diff --name-only $base_ref...$GITHUB_SHA)
+        fi
+
+        to_match="${{ inputs.to-match }}"
+        matched="false"
+        
+        while IFS= read -r line; do
+          if [[ $(echo "$line" | grep $to_match) != "" ]]; then
+            matched="true"
+            break
+          fi
+        done <<< "$changed_files"
+        
+        echo "::set-output name=matched::$(echo $matched)"
